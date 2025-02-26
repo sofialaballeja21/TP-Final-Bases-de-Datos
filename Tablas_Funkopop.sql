@@ -36,6 +36,11 @@ CREATE TABLE peticionProducto (
     CONSTRAINT fk_Usuario FOREIGN KEY (idusuarios) REFERENCES usuario(idusuarios)
 );
 
+ALTER TABLE peticionproducto
+ADD COLUMN idProducto INT,
+ADD CONSTRAINT fk_producto FOREIGN KEY (idProducto) REFERENCES producto(idproducto);
+
+
 CREATE TABLE reseniaComentario (
     idReseniaComentario SERIAL PRIMARY KEY,
     comentario TEXT NOT NULL,
