@@ -1,45 +1,32 @@
-CREATE OR REPLACE PROCEDURE calcular_ventas_con_descuento(
-    p_idUsuario INT,
-    p_fecha_inicio DATE,
-    p_fecha_fin DATE,
-    p_idAdmin INT
+CREATE OR REPLACE PROCEDURE calcular_cantidad_de_peticiones_de_producto(
+    p_idUsuario INT,   -- Usuario que ejecuta la acción
+    p_idProducto INT   -- Producto del que se contarán las peticiones
 )
 LANGUAGE plpgsql
 AS $$
 DECLARE
     v_es_admin BOOLEAN;
-    v_usuario_existente BOOLEAN;
-    v_total_descuento REAL;
+    v_cantidad_peticiones INT;
 BEGIN
-    -- Verificar si el usuario que ejecuta la acción es un Administrador
-    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idAdmin;
-    
+    -- 🔹 Verificar si el usuario que ejecuta la acción es Administrador
+    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idUsuario;
+
     IF NOT v_es_admin THEN
-        RAISE EXCEPTION 'Acceso denegado: Solo los administradores pueden calcular ventas con descuento.';
+        RAISE EXCEPTION 'Acceso denegado: Solo los administradores pueden calcular la cantidad de peticiones de producto.';
     END IF;
 
-    -- Verificar si el usuario existe
-    SELECT EXISTS(SELECT 1 FROM usuario WHERE idusuarios = p_idUsuario) INTO v_usuario_existente;
-    
-    IF NOT v_usuario_existente THEN
-        RAISE EXCEPTION 'Error: El usuario con ID % no existe.', p_idUsuario;
-    END IF;
+    -- 🔹 Contar cuántas peticiones existen para el producto
+    SELECT COUNT(*) INTO v_cantidad_peticiones
+    FROM peticionProducto
+    WHERE idProducto = p_idProducto;
 
-    -- Calcular el total de ventas con descuento en el rango de fechas
-    SELECT COALESCE(SUM(total - (total * COALESCE(descuento, 0) / 100)), 0) 
-    INTO v_total_descuento
-    FROM venta
-    WHERE fecha::DATE BETWEEN p_fecha_inicio AND p_fecha_fin
-    AND descuento > 0;  -- Solo considerar ventas con descuento
-
-    -- Mostrar el total de ventas con descuento en el período especificado
-    RAISE NOTICE 'El total de ventas con descuento entre % y % es: %', p_fecha_inicio, p_fecha_fin, v_total_descuento;
+    -- 🔹 Mostrar el resultado
+    RAISE NOTICE 'El producto con ID % tiene % peticiones registradas.', p_idProducto, v_cantidad_peticiones;
 END;
 $$;
 
+CALL calcular_cantidad_de_peticiones_de_producto(1, 3);
 
---Llamada al procedimiento
---CALL calcular_ventas_con_descuento(1, '2024-01-01', '2024-02-01', 10);
 
 CREATE OR REPLACE PROCEDURE actualizar_stock(
     p_idProducto INT,
@@ -75,13 +62,13 @@ BEGIN
     -- Actualizar el stock restando la cantidad vendida
     UPDATE producto
     SET stock = stock - p_cantidadVendida
-    WHERE idproducto = p_idProducto;
+    WHERE idProducto = p_idProducto;
 
     RAISE NOTICE 'Stock actualizado correctamente. Nuevo stock: %', v_stock_actual - p_cantidadVendida;
 END;
 $$;
 
-CALL actualizar_stock(5, 3, 10);
+CALL actualizar_stock(5, 3, 1);
 
 
 CREATE OR REPLACE PROCEDURE calcular_total_producto(
@@ -96,20 +83,15 @@ DECLARE
     v_precio_unitario REAL;
     v_total REAL;
 BEGIN
-    -- Verificar si el usuario que ejecuta la acción es un Administrador
-    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idAdmin;
     
+    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idAdmin;
+
     IF NOT v_es_admin THEN
         RAISE EXCEPTION 'Acceso denegado: Solo los administradores pueden calcular el total de un producto.';
     END IF;
 
-    -- Verificar que la cantidad ingresada sea válida
-    IF p_cantidadProductos <= 0 THEN
-        RAISE EXCEPTION 'Error: La cantidad de productos debe ser mayor a 0.';
-    END IF;
-
     -- Obtener el precio del producto
-    SELECT precio INTO v_precio_unitario FROM producto WHERE idproducto = p_idProducto;
+    SELECT precio INTO v_precio_unitario FROM producto WHERE idProducto = p_idProducto;
 
     -- Verificar si el producto existe
     IF v_precio_unitario IS NULL THEN
@@ -123,5 +105,6 @@ BEGIN
     RAISE NOTICE 'El total por % unidades del producto ID % es: %', p_cantidadProductos, p_idProducto, v_total;
 END;
 $$;
+
 
 CALL calcular_total_producto(1, 5, 10);
