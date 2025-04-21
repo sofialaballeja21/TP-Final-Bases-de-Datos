@@ -58,7 +58,7 @@ CREATE TABLE producto (
     descripcion TEXT NOT NULL,
     brilla BOOLEAN NOT NULL,
     precio REAL NOT null check (precio >= 0) ,
-    stock BOOLEAN DEFAULT TRUE,
+    stock INTEGER NOT NULL,
     cantidadDisponible SERIAL NOT null check (cantidadDisponible >= 0),
     URL_imagen VARCHAR(500) NOT NULL,
     idColeccion SERIAL,
