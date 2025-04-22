@@ -58,7 +58,7 @@ CREATE TABLE producto (
     descripcion TEXT NOT NULL,
     brilla BOOLEAN NOT NULL,
     precio REAL NOT null check (precio >= 0) ,
-    stock INTEGER NOT NULL check (cantidadDisponible >= 0),
+    stock INTEGER NOT NULL check (stock >= 0),
     URL_imagen VARCHAR(500) NOT NULL,
     idColeccion SERIAL,
     CONSTRAINT fk_Coleccion FOREIGN KEY (idColeccion) REFERENCES coleccion(idColeccion)
