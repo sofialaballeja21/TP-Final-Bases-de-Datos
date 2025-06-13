@@ -1,110 +1,121 @@
-CREATE OR REPLACE PROCEDURE calcular_cantidad_de_peticiones_de_producto(
-    p_idUsuario INT,   -- Usuario que ejecuta la acción
-    p_idProducto INT   -- Producto del que se contarán las peticiones
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_es_admin BOOLEAN;
-    v_cantidad_peticiones INT;
-BEGIN
-    -- 🔹 Verificar si el usuario que ejecuta la acción es Administrador
-    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idUsuario;
+-- calcular_cantidad_de_peticiones_de_producto
+create or replace function calcular_cantidad_de_peticiones_de_producto (
+ p_idproducto int)
+returns bigint as $$ --bigint devuelve un nro entero grande
 
-    IF NOT v_es_admin THEN
-        RAISE EXCEPTION 'Acceso denegado: Solo los administradores pueden calcular la cantidad de peticiones de producto.';
+declare 
+     cantidad_peticiones int;
+
+begin
+	select COUNT(*) into cantidad_peticiones
+	from peticionProducto
+	where idProducto = p_idproducto;
+	
+	return cantidad_peticiones;
+	
+end;
+$$ language plpgsql;
+
+-- cargar una reseña
+create or replace function cargar_una_resenia (
+u_idusuario int, p_idproducto int, r_comentario text, r_resenia int)
+returns text as $$
+
+declare
+    producto_existente Boolean;
+    usuario_existente boolean;
+
+begin
+
+   select exists 
+   (select 1 from producto where idProducto = p_idproducto) into producto_existente;
+   if not producto_existente then
+    return 'Error: el producto con id' || p_idProducto || ' no existe.';
+   end if;
+
+   select exists 
+   (select 1 from usuario where idUsuario = u_usuario) into usuario_existente;
+   if not usuario_existente then
+     return 'Error: El usuario con id' || u_idusuario || ' no existe.';
+   end if;
+
+   if r_resenia < 1 or r_resenia > 5 then
+     return 'Error: La reseña debe ser entre 1 y 5';
+   end if;
+
+   insert into reseniaComentario(idProducto, idUsuario, comentario, resenia) 
+   values (p_idproducto, u_idusuario, r_comentario, r_resenia);
+   return 'Reseña cargada correctamente';
+  exception 
+   when others then
+    return 'Error inesperado al cargar la reseña' || SQLERRM;
+
+end;
+$$ language plpgsql;
+
+
+-- Función para agregar productos al carrito
+create or replace function agregar_productos_al_carrito (
+p_idprodcuto int, c_idcarrito int, u_idusuario int, p_cantidad int)
+returns TEXT as $$
+declare 
+  v_idCarrito int;
+  v_stockProducto int;
+  v_cantidad_en_carrito int;
+  v_nombreProducto varchar(50);
+begin
+	-- obtener el idcarrito del usuario
+	select idCarrito into v_idcarrito
+	from usuario
+	where idusuarios = u_idusuario;
+	
+	if  c_carrito is null then
+	  return 'Error: El usuario no tiene un carrito asignado';
+	end if;
+	
+	-- obtener el stock actual del producto y su nombre
+	select stock.p, nombre.p into v_stockProducto, v_nombreProducto 
+	from producto p 
+	where idproducto == p_idproducto;
+	
+	if stock == 0 then
+	 return 'No hay stock disponible';
+	end if;
+	
+	-- verificar si hay suficiente stock
+	if p_cantidad <= 0 then
+	  return 'Error la cantidad debe ser mayor que 0';
+	end if;
+	
+	if v_stockProducto < p_cantidad then 
+	RETURN 'Error: No hay suficiente stock de ' || v_nombreProducto || '. Stock disponible: ' || v_stockProducto || '.';
     END IF;
-
-    -- 🔹 Contar cuántas peticiones existen para el producto
-    SELECT COUNT(*) INTO v_cantidad_peticiones
-    FROM peticionProducto
-    WHERE idProducto = p_idProducto;
-
-    -- 🔹 Mostrar el resultado
-    RAISE NOTICE 'El producto con ID % tiene % peticiones registradas.', p_idProducto, v_cantidad_peticiones;
-END;
-$$;
-
-CALL calcular_cantidad_de_peticiones_de_producto(1, 3);
-
-
-CREATE OR REPLACE PROCEDURE actualizar_stock(
-    p_idProducto INT,
-    p_cantidadVendida INT,
-    p_idUsuario INT -- ID del usuario que ejecuta la acción
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_stock_actual INT;
-    v_es_admin BOOLEAN;
-BEGIN
-    -- Verificar si el usuario tiene permiso de Administrador
-    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idAdmin;
-    
-    IF NOT v_es_admin THEN
-        RAISE EXCEPTION 'Acceso denegado: Solo los administradores pueden actualizar el stock.';
+	
+	-- verificar si el producto esta en el carrito
+	select cantidad into v_cantidad_en_carrito
+	from productoxcarrito 
+	where idCarrito = v_idcarrito and idProducto = p_idproducto;
+	
+	if v_cantidad_en_carrito is not null then
+	   IF (v_cantidad_en_carrito + p_cantidad) > v_stockProducto THEN
+          RETURN 'Error: Agregar ' || p_cantidad || ' unidades de ' || v_nombreProducto || ' excede el stock disponible. Tienes ' || v_cantidad_en_carrito  || ' en el carrito. Stock total: ' || v_stockProducto || '.';
+       END IF;
+	  
+	   update productoxcarrito p 
+	   set cantidad = cantidad + p_cantidad
+	   where idCarrito = v_idcarrito and idProducto = p_idproducto;
+	
+	else
+	  insert into productoxcarrito (idproductoxcarrito, idProducto, cantidad)
+	  values (V_idCarrito, p_idProducto, p_cantidad);
+	
+	  return 'Producto' || v_nombreProducto || ' agregado al carrito exitosamente.';
     END IF;
+	  
+    exception
+       when others then
+          return 'Error inesperado: ' sqlerrm; 
+end;
+$$ language plpgsql;
 
-    -- Obtener el stock actual del producto
-    SELECT stock INTO v_stock_actual FROM producto WHERE idproducto = p_idProducto;
-    
-    -- Verificar si el producto existe
-    IF v_stock_actual IS NULL THEN
-        RAISE EXCEPTION 'Error: El producto con ID % no existe.', p_idProducto;
-    END IF;
-
-    -- Verificar si hay suficiente stock disponible
-    IF v_stock_actual < p_cantidadVendida THEN
-        RAISE EXCEPTION 'Error: Stock insuficiente. Stock actual: %, cantidad requerida: %', v_stock_actual, p_cantidadVendida;
-    END IF;
-
-    -- Actualizar el stock restando la cantidad vendida
-    UPDATE producto
-    SET stock = stock - p_cantidadVendida
-    WHERE idProducto = p_idProducto;
-
-    RAISE NOTICE 'Stock actualizado correctamente. Nuevo stock: %', v_stock_actual - p_cantidadVendida;
-END;
-$$;
-
-CALL actualizar_stock(5, 3, 1);
-
-
-CREATE OR REPLACE PROCEDURE calcular_total_producto(
-    p_idProducto INT,
-    p_cantidadProductos INT,
-    p_idAdmin INT
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    v_es_admin BOOLEAN;
-    v_precio_unitario REAL;
-    v_total REAL;
-BEGIN
-    
-    SELECT rol INTO v_es_admin FROM usuario WHERE idusuarios = p_idAdmin;
-
-    IF NOT v_es_admin THEN
-        RAISE EXCEPTION 'Acceso denegado: Solo los administradores pueden calcular el total de un producto.';
-    END IF;
-
-    -- Obtener el precio del producto
-    SELECT precio INTO v_precio_unitario FROM producto WHERE idProducto = p_idProducto;
-
-    -- Verificar si el producto existe
-    IF v_precio_unitario IS NULL THEN
-        RAISE EXCEPTION 'Error: El producto con ID % no existe.', p_idProducto;
-    END IF;
-
-    -- Calcular el total
-    v_total := v_precio_unitario * p_cantidadProductos;
-
-    -- Mostrar el resultado
-    RAISE NOTICE 'El total por % unidades del producto ID % es: %', p_cantidadProductos, p_idProducto, v_total;
-END;
-$$;
-
-
-CALL calcular_total_producto(1, 5, 10);
+   
